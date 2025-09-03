@@ -15,23 +15,16 @@ plugins {
     kotlin("jvm")
     `maven-publish`
     signing
-    id("org.jetbrains.dokka") version ("1.7.20")
+    id("org.jetbrains.dokka")
 }
 
-dependencies {
-    api(kotlin("stdlib", kotlinBaseVersion))
+val sourceJar = tasks.register<Jar>("sourcesJar") {
+    archiveClassifier.set("sources")
+    from(sourceSets.main.map { it.allSource })
 }
-tasks {
-    val sourcesJar by creating(Jar::class) {
-        archiveClassifier.set("sources")
-        from(sourceSets.main.get().allSource)
-    }
-}
-
-val dokkaJavadocJar by tasks.register<Jar>("dokkaJavadocJar") {
-    dependsOn(tasks.dokkaJavadoc)
-    from(tasks.dokkaJavadoc.flatMap { it.outputDirectory })
+val dokkaJavadocJar = tasks.register<Jar>("dokkaJavadocJar") {
     archiveClassifier.set("javadoc")
+    from(tasks.dokkaJavadoc.flatMap { it.outputDirectory })
 }
 
 publishing {
@@ -39,8 +32,8 @@ publishing {
         create<MavenPublication>("default") {
             artifactId = "symbol-processing-api"
             from(components["java"])
-            artifact(tasks["sourcesJar"])
-            artifact(tasks["dokkaJavadocJar"])
+            artifact(sourceJar)
+            artifact(dokkaJavadocJar)
             pom {
                 name.set("com.google.devtools.ksp:symbol-processing-api")
                 description.set("Symbol processing for Kotlin")

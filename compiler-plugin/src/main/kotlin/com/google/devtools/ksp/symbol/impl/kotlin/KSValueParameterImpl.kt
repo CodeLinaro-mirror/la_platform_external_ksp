@@ -17,9 +17,10 @@
 
 package com.google.devtools.ksp.symbol.impl.kotlin
 
-import com.google.devtools.ksp.KSObjectCache
-import com.google.devtools.ksp.memoized
-import com.google.devtools.ksp.processing.impl.KSNameImpl
+import com.google.devtools.ksp.common.impl.KSNameImpl
+import com.google.devtools.ksp.common.impl.KSTypeReferenceSyntheticImpl
+import com.google.devtools.ksp.common.memoized
+import com.google.devtools.ksp.processing.impl.KSObjectCache
 import com.google.devtools.ksp.processing.impl.findAnnotationFromUseSiteTarget
 import com.google.devtools.ksp.symbol.KSAnnotation
 import com.google.devtools.ksp.symbol.KSName
@@ -31,7 +32,6 @@ import com.google.devtools.ksp.symbol.KSValueParameter
 import com.google.devtools.ksp.symbol.KSVisitor
 import com.google.devtools.ksp.symbol.Location
 import com.google.devtools.ksp.symbol.Origin
-import com.google.devtools.ksp.symbol.impl.synthetic.KSTypeReferenceSyntheticImpl
 import com.google.devtools.ksp.symbol.impl.toLocation
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationUseSiteTarget
 import org.jetbrains.kotlin.lexer.KtTokens.CROSSINLINE_KEYWORD
@@ -112,7 +112,8 @@ class KSValueParameterImpl private constructor(val ktParameter: KtParameter) : K
 
     override val type: KSTypeReference by lazy {
         ktParameter.typeReference?.let { KSTypeReferenceImpl.getCached(it) }
-            ?: findPropertyForAccessor()?.type ?: KSTypeReferenceSyntheticImpl.getCached(KSErrorType, this)
+            ?: findPropertyForAccessor()?.type
+            ?: KSTypeReferenceSyntheticImpl.getCached(KSErrorType(null /* no info available */), this)
     }
 
     override val hasDefault: Boolean = ktParameter.hasDefaultValue()

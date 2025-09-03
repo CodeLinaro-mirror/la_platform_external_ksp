@@ -1,5 +1,8 @@
 import com.google.devtools.ksp.configureKtlint
 import com.google.devtools.ksp.configureKtlintApplyToIdea
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension
+import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 
 val sonatypeUserName: String? by project
 val sonatypePassword: String? by project
@@ -16,12 +19,16 @@ if (!extra.has("kspVersion")) {
 
 repositories {
     mavenCentral()
-    maven("https://maven.pkg.jetbrains.space/kotlin/p/kotlin/bootstrap/")
+    maven("https://redirector.kotlinlang.org/maven/bootstrap/")
 }
 
 plugins {
-    kotlin("jvm") version "1.8.0"
-    id("io.github.gradle-nexus.publish-plugin") version "1.1.0"
+    kotlin("jvm")
+    id("io.github.gradle-nexus.publish-plugin") version "2.0.0"
+    // Adding plugins used in multiple places to the classpath for centralized version control
+    id("com.gradleup.shadow") version "8.3.6" apply false
+    id("org.jetbrains.dokka") version "1.9.20" apply false
+    id("com.android.lint") version "8.10.0" apply false
 }
 
 nexusPublishing {
@@ -30,22 +37,24 @@ nexusPublishing {
         sonatype {
             username.set(sonatypeUserName)
             password.set(sonatypePassword)
+            nexusUrl.set(uri("https://ossrh-staging-api.central.sonatype.com/service/local/"))
+            snapshotRepositoryUrl.set(uri("https://central.sonatype.com/repository/maven-snapshots/"))
         }
     }
 }
 
 version = rootProject.extra.get("kspVersion") as String
 
-project.configureKtlintApplyToIdea()
+configureKtlintApplyToIdea()
 subprojects {
     group = "com.google.devtools.ksp"
     version = rootProject.extra.get("kspVersion") as String
-    this.configureKtlint()
+    configureKtlint()
     repositories {
         mavenCentral()
         google()
-        maven("https://maven.pkg.jetbrains.space/kotlin/p/kotlin/bootstrap/")
-        maven("https://www.jetbrains.com/intellij-repository/snapshots")
+        maven("https://redirector.kotlinlang.org/maven/bootstrap/")
+        maven("https://www.jetbrains.com/intellij-repository/releases")
     }
     pluginManager.withPlugin("maven-publish") {
         val publishExtension = extensions.getByType<PublishingExtension>()
@@ -60,7 +69,7 @@ subprojects {
             }
             maven {
                 name = "test"
-                url = uri("${rootProject.buildDir}/repos/test")
+                url = uri("${rootProject.layout.buildDirectory.get().asFile}/repos/test")
             }
         }
         publishExtension.publications.whenObjectAdded {
@@ -90,8 +99,32 @@ subprojects {
         }
     }
 
-    tasks.withType<JavaCompile>().configureEach {
-        sourceCompatibility = JavaVersion.VERSION_1_8.toString()
-        targetCompatibility = JavaVersion.VERSION_1_8.toString()
+    val compileJavaVersion = JavaLanguageVersion.of(17)
+
+    pluginManager.withPlugin("org.jetbrains.kotlin.jvm") {
+        configure<JavaPluginExtension> {
+            toolchain.languageVersion.set(compileJavaVersion)
+            sourceCompatibility = JavaVersion.VERSION_1_8
+            targetCompatibility = JavaVersion.VERSION_1_8
+        }
+        configure<KotlinJvmProjectExtension> {
+            compilerOptions {
+                jvmTarget = JvmTarget.JVM_1_8
+                languageVersion.set(KotlinVersion.KOTLIN_1_9)
+                apiVersion.set(languageVersion)
+            }
+            jvmToolchain {
+                languageVersion = compileJavaVersion
+            }
+        }
+    }
+
+    tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+        compilerOptions.freeCompilerArgs.add("-Xskip-prerelease-check")
+    }
+
+    tasks.withType<Jar>().configureEach {
+        isPreserveFileTimestamps = false
+        isReproducibleFileOrder = true
     }
 }

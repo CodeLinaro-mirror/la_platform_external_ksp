@@ -18,19 +18,20 @@
 @file:Suppress("INVISIBLE_REFERENCE", "INVISIBLE_MEMBER")
 
 package com.google.devtools.ksp.gradle
-
 import org.gradle.api.Project
 import org.gradle.api.Task
+import org.gradle.api.file.ConfigurableFileCollection
+import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.FileCollection
 import org.gradle.api.model.ObjectFactory
 import org.gradle.api.provider.ListProperty
-import org.gradle.api.provider.Property
 import org.gradle.api.provider.ProviderFactory
 import org.gradle.api.tasks.CacheableTask
 import org.gradle.api.tasks.IgnoreEmptyDirectories
 import org.gradle.api.tasks.InputFiles
 import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.Nested
+import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
@@ -38,21 +39,30 @@ import org.gradle.api.tasks.SkipWhenEmpty
 import org.gradle.api.tasks.TaskProvider
 import org.gradle.process.CommandLineArgumentProvider
 import org.gradle.process.ExecOperations
+import org.gradle.work.Incremental
 import org.gradle.work.InputChanges
+import org.gradle.work.NormalizeLineEndings
 import org.gradle.workers.WorkerExecutor
+import org.jetbrains.kotlin.buildtools.api.SourcesChanges
 import org.jetbrains.kotlin.cli.common.arguments.CommonCompilerArguments
 import org.jetbrains.kotlin.cli.common.arguments.K2JSCompilerArguments
 import org.jetbrains.kotlin.cli.common.arguments.K2JVMCompilerArguments
 import org.jetbrains.kotlin.cli.common.arguments.K2MetadataCompilerArguments
-import org.jetbrains.kotlin.gradle.dsl.KotlinCommonCompilerOptions
+import org.jetbrains.kotlin.gradle.dsl.KotlinJsCompilerOptions
 import org.jetbrains.kotlin.gradle.dsl.KotlinJsCompilerOptionsDefault
+import org.jetbrains.kotlin.gradle.dsl.KotlinJsCompilerOptionsHelper
+import org.jetbrains.kotlin.gradle.dsl.KotlinJvmCompilerOptions
 import org.jetbrains.kotlin.gradle.dsl.KotlinJvmCompilerOptionsDefault
+import org.jetbrains.kotlin.gradle.dsl.KotlinJvmCompilerOptionsHelper
+import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformCommonCompilerOptions
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformCommonCompilerOptionsDefault
+import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformCommonCompilerOptionsHelper
+import org.jetbrains.kotlin.gradle.dsl.KotlinNativeCompilerOptions
+import org.jetbrains.kotlin.gradle.dsl.KotlinNativeCompilerOptionsDefault
+import org.jetbrains.kotlin.gradle.dsl.KotlinNativeCompilerOptionsHelper
 import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation
 import org.jetbrains.kotlin.gradle.plugin.SubpluginOption
-import org.jetbrains.kotlin.gradle.plugin.mpp.enabledOnCurrentHost
-import org.jetbrains.kotlin.gradle.plugin.mpp.pm20.KotlinCompilationData
-import org.jetbrains.kotlin.gradle.plugin.mpp.pm20.KotlinNativeCompilationData
+import org.jetbrains.kotlin.gradle.tasks.AbstractKotlinCompileTool
 import org.jetbrains.kotlin.gradle.tasks.Kotlin2JsCompile
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompileCommon
@@ -61,7 +71,7 @@ import org.jetbrains.kotlin.gradle.tasks.TaskOutputsBackup
 import org.jetbrains.kotlin.gradle.tasks.configuration.BaseKotlin2JsCompileConfig
 import org.jetbrains.kotlin.gradle.tasks.configuration.KotlinCompileCommonConfig
 import org.jetbrains.kotlin.gradle.tasks.configuration.KotlinCompileConfig
-import org.jetbrains.kotlin.incremental.ChangedFiles
+import org.jetbrains.kotlin.konan.target.HostManager
 import java.io.File
 import java.nio.file.Paths
 import javax.inject.Inject
@@ -79,17 +89,16 @@ class KotlinFactories {
             kotlinCompilation: KotlinCompilationData<*>,
         ): TaskProvider<out KspTaskJvm> {
             return project.tasks.register(taskName, KspTaskJvm::class.java).also { kspTaskProvider ->
-                KotlinCompileConfig(kotlinCompilation)
+                @Suppress("UNCHECKED_CAST")
+                KotlinCompileConfig(KotlinCompilationInfo(kotlinCompilation))
                     .execute(kspTaskProvider as TaskProvider<KotlinCompile>)
 
-                // useClasspathSnapshot isn't configurable per task.
-                // Workaround: enable the other path and ignore irrelevant changes
-                // See [KotlinCompileConfig] in for details.
-                // FIXME: make it configurable in upstream or support useClasspathSnapshot == true, if possible.
                 kspTaskProvider.configure {
-                    if (it.classpathSnapshotProperties.useClasspathSnapshot.get()) {
-                        it.classpathSnapshotProperties.classpath.from(project.provider { it.libraries })
-                    }
+                    val compilerOptions = kotlinCompilation.compilerOptions.options as KotlinJvmCompilerOptions
+                    KotlinJvmCompilerOptionsHelper.syncOptionsAsConvention(
+                        from = compilerOptions,
+                        into = it.compilerOptions
+                    )
                 }
             }
         }
@@ -100,9 +109,16 @@ class KotlinFactories {
             kotlinCompilation: KotlinCompilationData<*>,
         ): TaskProvider<out KspTaskJS> {
             return project.tasks.register(taskName, KspTaskJS::class.java).also { kspTaskProvider ->
-                BaseKotlin2JsCompileConfig<Kotlin2JsCompile>(kotlinCompilation)
+                @Suppress("UNCHECKED_CAST")
+                BaseKotlin2JsCompileConfig<Kotlin2JsCompile>(KotlinCompilationInfo(kotlinCompilation))
                     .execute(kspTaskProvider as TaskProvider<Kotlin2JsCompile>)
                 kspTaskProvider.configure {
+                    val compilerOptions = kotlinCompilation.compilerOptions.options as KotlinJsCompilerOptions
+                    KotlinJsCompilerOptionsHelper.syncOptionsAsConvention(
+                        from = compilerOptions,
+                        into = it.compilerOptions
+                    )
+
                     it.incrementalJsKlib = false
                 }
             }
@@ -114,8 +130,18 @@ class KotlinFactories {
             kotlinCompilation: KotlinCompilationData<*>,
         ): TaskProvider<out KspTaskMetadata> {
             return project.tasks.register(taskName, KspTaskMetadata::class.java).also { kspTaskProvider ->
-                KotlinCompileCommonConfig(kotlinCompilation)
+                @Suppress("UNCHECKED_CAST")
+                KotlinCompileCommonConfig(KotlinCompilationInfo(kotlinCompilation))
                     .execute(kspTaskProvider as TaskProvider<KotlinCompileCommon>)
+
+                kspTaskProvider.configure {
+                    val compilerOptions =
+                        kotlinCompilation.compilerOptions.options as KotlinMultiplatformCommonCompilerOptions
+                    KotlinMultiplatformCommonCompilerOptionsHelper.syncOptionsAsConvention(
+                        from = compilerOptions,
+                        into = it.compilerOptions
+                    )
+                }
             }
         }
 
@@ -127,11 +153,22 @@ class KotlinFactories {
             return project.tasks.register(
                 taskName,
                 KspTaskNative::class.java,
-                kotlinCompilation as KotlinNativeCompilationData<*>
+                KotlinCompilationInfo(kotlinCompilation)
             ).apply {
                 configure { kspTask ->
+                    val compilerOptions = kotlinCompilation.compilerOptions.options as KotlinNativeCompilerOptions
+                    KotlinNativeCompilerOptionsHelper.syncOptionsAsConvention(
+                        from = compilerOptions,
+                        into = kspTask.compilerOptions
+                    )
+                    kspTask.produceUnpackagedKlib.set(false)
                     kspTask.onlyIf {
-                        kspTask.konanTarget.enabledOnCurrentHost
+                        // KonanTarget is not properly serializable, hence we should check by name
+                        // see https://youtrack.jetbrains.com/issue/KT-61657.
+                        val konanTargetName = kspTask.konanTarget.name
+                        HostManager().enabled.any {
+                            it.name == konanTargetName
+                        }
                     }
                 }
             }
@@ -147,7 +184,7 @@ interface KspTask : Task {
     val commandLineArgumentProviders: ListProperty<CommandLineArgumentProvider>
 
     @get:Internal
-    val incrementalChangesTransformers: ListProperty<(ChangedFiles) -> List<SubpluginOption>>
+    val incrementalChangesTransformers: ListProperty<(SourcesChanges) -> List<SubpluginOption>>
 }
 
 @CacheableTask
@@ -161,7 +198,15 @@ abstract class KspTaskJvm @Inject constructor(
     ),
     KspTask {
     @get:OutputDirectory
-    abstract val destination: Property<File>
+    abstract val destination: DirectoryProperty
+
+    @get:PathSensitive(PathSensitivity.NONE)
+    @get:Incremental
+    @get:IgnoreEmptyDirectories
+    @get:NormalizeLineEndings
+    @get:Optional
+    @get:InputFiles
+    abstract val classpathStructure: ConfigurableFileCollection
 
     // Override incrementalProps to exclude irrelevant changes
     override val incrementalProps: List<FileCollection>
@@ -169,15 +214,14 @@ abstract class KspTaskJvm @Inject constructor(
             sources,
             javaSources,
             commonSourceSet,
-            classpathSnapshotProperties.classpath,
+            classpathStructure,
         )
 
     // Overrding an internal function is hacky.
     // TODO: Ask upstream to open it.
-    @Suppress("INVISIBLE_REFERENCE", "INVISIBLE_MEMBER", "EXPOSED_PARAMETER_TYPE")
+    @Suppress("INVISIBLE_REFERENCE", "INVISIBLE_MEMBER", "EXPOSED_PARAMETER_TYPE", "FunctionName", "unused")
     fun `callCompilerAsync$kotlin_gradle_plugin_common`(
         args: K2JVMCompilerArguments,
-        kotlinSources: Set<File>,
         inputChanges: InputChanges,
         taskOutputsBackup: TaskOutputsBackup?
     ) {
@@ -186,7 +230,7 @@ abstract class KspTaskJvm @Inject constructor(
             it(changedFiles)
         }
         args.addPluginOptions(extraOptions)
-        super.callCompilerAsync(args, kotlinSources, inputChanges, taskOutputsBackup)
+        super.callCompilerAsync(args, inputChanges, taskOutputsBackup)
     }
 
     override fun skipCondition(): Boolean = sources.isEmpty && javaSources.isEmpty
@@ -196,7 +240,8 @@ abstract class KspTaskJvm @Inject constructor(
     @get:IgnoreEmptyDirectories
     @get:PathSensitive(PathSensitivity.RELATIVE)
     override val javaSources: FileCollection = super.javaSources.filter {
-        !destination.get().isParentOf(it)
+        // TODO: This is eager realization of destination directory
+        !destination.get().asFile.isParentOf(it)
     }
 }
 
@@ -213,10 +258,9 @@ abstract class KspTaskJS @Inject constructor(
 
     // Overrding an internal function is hacky.
     // TODO: Ask upstream to open it.
-    @Suppress("INVISIBLE_REFERENCE", "INVISIBLE_MEMBER", "EXPOSED_PARAMETER_TYPE")
+    @Suppress("INVISIBLE_REFERENCE", "INVISIBLE_MEMBER", "EXPOSED_PARAMETER_TYPE", "FunctionName", "unused")
     fun `callCompilerAsync$kotlin_gradle_plugin_common`(
         args: K2JSCompilerArguments,
-        kotlinSources: Set<File>,
         inputChanges: InputChanges,
         taskOutputsBackup: TaskOutputsBackup?
     ) {
@@ -225,7 +269,7 @@ abstract class KspTaskJS @Inject constructor(
             it(changedFiles)
         }
         args.addPluginOptions(extraOptions)
-        super.callCompilerAsync(args, kotlinSources, inputChanges, taskOutputsBackup)
+        super.callCompilerAsync(args, inputChanges, taskOutputsBackup)
     }
 }
 
@@ -242,10 +286,9 @@ abstract class KspTaskMetadata @Inject constructor(
 
     // Overrding an internal function is hacky.
     // TODO: Ask upstream to open it.
-    @Suppress("INVISIBLE_REFERENCE", "INVISIBLE_MEMBER", "EXPOSED_PARAMETER_TYPE")
+    @Suppress("INVISIBLE_REFERENCE", "INVISIBLE_MEMBER", "EXPOSED_PARAMETER_TYPE", "FunctionName", "unused")
     fun `callCompilerAsync$kotlin_gradle_plugin_common`(
         args: K2MetadataCompilerArguments,
-        kotlinSources: Set<File>,
         inputChanges: InputChanges,
         taskOutputsBackup: TaskOutputsBackup?
     ) {
@@ -254,7 +297,7 @@ abstract class KspTaskMetadata @Inject constructor(
             it(changedFiles)
         }
         args.addPluginOptions(extraOptions)
-        super.callCompilerAsync(args, kotlinSources, inputChanges, taskOutputsBackup)
+        super.callCompilerAsync(args, inputChanges, taskOutputsBackup)
     }
 }
 
@@ -264,11 +307,14 @@ abstract class KspTaskNative @Inject internal constructor(
     objectFactory: ObjectFactory,
     providerFactory: ProviderFactory,
     execOperations: ExecOperations
-) : KotlinNativeCompile(compilation, objectFactory, providerFactory, execOperations), KspTask {
-
-    override val compilerOptions: KotlinCommonCompilerOptions =
-        objectFactory.newInstance(KotlinMultiplatformCommonCompilerOptionsDefault::class.java)
-}
+) : KotlinNativeCompile(
+        compilation,
+        objectFactory.newInstance(KotlinNativeCompilerOptionsDefault::class.java),
+        objectFactory,
+        providerFactory,
+        execOperations
+    ),
+    KspTask
 
 internal fun SubpluginOption.toArg() = "plugin:${KspGradleSubplugin.KSP_PLUGIN_ID}:$key=$value"
 
@@ -281,4 +327,8 @@ internal fun File.isParentOf(childCandidate: File): Boolean {
     val childCandidatePath = Paths.get(childCandidate.absolutePath).normalize()
 
     return childCandidatePath.startsWith(parentPath)
+}
+
+internal fun disableRunViaBuildToolsApi(kspTask: AbstractKotlinCompileTool<*>) {
+    kspTask.runViaBuildToolsApi.value(false).disallowChanges()
 }
