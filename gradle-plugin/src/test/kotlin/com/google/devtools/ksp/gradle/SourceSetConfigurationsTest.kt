@@ -27,19 +27,30 @@ import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.processing.SymbolProcessor
 import com.google.devtools.ksp.symbol.KSAnnotated
 import com.google.devtools.ksp.symbol.KSClassDeclaration
+import org.gradle.testkit.runner.TaskOutcome
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.junit.runner.RunWith
+import org.junit.runners.Parameterized
 import java.io.File
 
-class SourceSetConfigurationsTest {
+@RunWith(Parameterized::class)
+class SourceSetConfigurationsTest(val useKSP2: Boolean) {
+
+    companion object {
+        @JvmStatic
+        @Parameterized.Parameters(name = "KSP2={0}")
+        fun params() = listOf(arrayOf(true), arrayOf(false))
+    }
+
     @Rule
     @JvmField
     val tmpDir = TemporaryFolder()
 
     @Rule
     @JvmField
-    val testRule = KspIntegrationTestRule(tmpDir)
+    val testRule = KspIntegrationTestRule(tmpDir, useKSP2)
 
     @Test
     fun configurationsForJvmApp() {
@@ -81,15 +92,12 @@ class SourceSetConfigurationsTest {
             """
                 kotlin {
                     jvm { }
-                    android(name = "foo") { }
-                    js(BOTH) { browser() }
+                    androidTarget(name = "foo") { }
+                    js(IR) { browser() }
                     androidNativeX86 { }
                     androidNativeX64(name = "bar") { }
                 }
                 
-                tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
-                    kotlinOptions.freeCompilerArgs += "-Xuse-deprecated-legacy-compiler"
-                }
             """.trimIndent()
         )
         testRule.appModule.addMultiplatformSource("commonMain", "Foo.kt", "class Foo")
@@ -125,43 +133,35 @@ class SourceSetConfigurationsTest {
     }
 
     @Test
-    fun configurationsForMultiplatformApp_doesNotCrossCompilationBoundaries() {
-        // Adding a ksp dependency on jvmParent should not leak into jvmChild compilation,
-        // even if the source sets depend on each other. This works because we use
-        // KotlinCompilation.kotlinSourceSets instead of KotlinCompilation.allKotlinSourceSets
+    fun configurationsForMultiplatformApp_skipEmptyKspTasks() {
         testRule.setupAppAsMultiplatformApp(
             """
                 kotlin {
-                    jvm("jvmParent") { }
-                    jvm("jvmChild") { }
+                    jvm { }
+                    js(IR) { browser() }
                 }
             """.trimIndent()
         )
         testRule.appModule.addMultiplatformSource("commonMain", "Foo.kt", "class Foo")
         testRule.appModule.buildFileAdditions.add(
             """
-                kotlin {
-                    sourceSets {
-                        this["jvmChildMain"].dependsOn(this["jvmParentMain"])
-                    }
-                }
                 dependencies {
-                    add("kspJvmParent", "androidx.room:room-compiler:2.4.2")
-                }
-                tasks.register("checkConfigurations") {
-                    doLast {
-                        // child has no dependencies, so task is not created.
-                        val parent = tasks.findByName("kspKotlinJvmParent")
-                        val child = tasks.findByName("kspKotlinJvmChild")
-                        require(parent != null)
-                        require(child == null)
-                    }
+                    add("kspJvm", "androidx.room:room-compiler:2.4.2")
                 }
             """.trimIndent()
         )
         testRule.runner()
-            .withArguments(":app:checkConfigurations")
-            .build()
+            .withArguments(":app:kspKotlinJvm", ":app:kspKotlinJs")
+            .build().let {
+                val kspKotlinJvm = it.task(":app:kspKotlinJvm")
+                val kspKotlinJs = it.task(":app:kspKotlinJs")
+                require(kspKotlinJvm != null)
+                require(kspKotlinJvm.outcome == TaskOutcome.SUCCESS)
+                // even though kspJs is not added, the task is created.
+                require(kspKotlinJs != null)
+                // kspKotlinJs has no dependencies, so task is skipped.
+                require(kspKotlinJs.outcome == TaskOutcome.SKIPPED)
+            }
     }
 
     @Test
@@ -183,11 +183,11 @@ class SourceSetConfigurationsTest {
                         val baseVariant = (this as com.android.build.gradle.internal.api.BaseVariantImpl)
                         val variantData = baseVariant::class.java.getMethod("getVariantData").invoke(baseVariant)
                             as com.android.build.gradle.internal.variant.BaseVariantData
-                        variantData.extraGeneratedSourceFolders.forEach {
-                            println("SRC:" + it.relativeTo(buildDir).path)
+                        variantData.extraGeneratedSourceFoldersOnlyInModel.forEach {
+                            println("SRC:" + it.relativeTo(layout.buildDirectory.get().asFile).path)
                         }
                         variantData.allPreJavacGeneratedBytecode.forEach {
-                            println("BYTE:" + it.relativeTo(buildDir).path)
+                            println("BYTE:" + it.relativeTo(layout.buildDirectory.get().asFile).path)
                         }
                     }
                 }
@@ -199,7 +199,7 @@ class SourceSetConfigurationsTest {
             }
             """.trimIndent()
         )
-        val result = testRule.runner().withDebug(true).withArguments(":app:printSources").build()
+        val result = testRule.runner().withArguments(":app:printSources").build()
 
         data class SourceFolder(
             val variantName: String,
@@ -241,21 +241,6 @@ class SourceSetConfigurationsTest {
                 it.path.contains("ksp")
             }
         ).containsExactly(
-            SourceFolder(
-                "debug", "SRC:generated/ksp/debug/java"
-            ),
-            SourceFolder(
-                "release", "SRC:generated/ksp/release/java"
-            ),
-            SourceFolder(
-                "debugAndroidTest", "SRC:generated/ksp/debugAndroidTest/java"
-            ),
-            SourceFolder(
-                "debugUnitTest", "SRC:generated/ksp/debugUnitTest/java"
-            ),
-            SourceFolder(
-                "releaseUnitTest", "SRC:generated/ksp/releaseUnitTest/java"
-            ),
             SourceFolder(
                 "debug", "SRC:generated/ksp/debug/kotlin"
             ),
@@ -308,7 +293,7 @@ class SourceSetConfigurationsTest {
             it.startsWith("kapt") && !it.startsWith("kaptClasspath_")
         }
         val kspConfigurations = configurations.filter {
-            it.startsWith("ksp")
+            it.startsWith("ksp") && !it.endsWith("KotlinProcessorClasspath") && !it.startsWith("kspPluginClasspath")
         }
         assertThat(kspConfigurations).containsExactlyElementsIn(
             kaptConfigurations.map {

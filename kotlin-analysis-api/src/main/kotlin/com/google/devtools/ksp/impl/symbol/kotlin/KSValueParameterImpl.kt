@@ -18,28 +18,31 @@
 @file:Suppress("INVISIBLE_REFERENCE", "INVISIBLE_MEMBER")
 package com.google.devtools.ksp.impl.symbol.kotlin
 
-import com.google.devtools.ksp.KSObjectCache
-import com.google.devtools.ksp.processing.impl.KSNameImpl
+import com.google.devtools.ksp.common.KSObjectCache
+import com.google.devtools.ksp.common.impl.KSNameImpl
+import com.google.devtools.ksp.common.lazyMemoizedSequence
+import com.google.devtools.ksp.impl.symbol.kotlin.resolved.KSTypeReferenceResolvedImpl
 import com.google.devtools.ksp.symbol.*
-import org.jetbrains.kotlin.analysis.api.fir.symbols.KtFirValueParameterSymbol
-import org.jetbrains.kotlin.analysis.api.symbols.KtValueParameterSymbol
-import org.jetbrains.kotlin.fir.java.JavaTypeParameterStack
-import org.jetbrains.kotlin.fir.java.declarations.FirJavaValueParameter
-import org.jetbrains.kotlin.fir.java.resolveIfJavaType
+import org.jetbrains.kotlin.analysis.api.symbols.KaClassSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.KaConstructorSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.KaPropertySymbol
+import org.jetbrains.kotlin.analysis.api.symbols.KaSymbolOrigin
+import org.jetbrains.kotlin.analysis.api.symbols.KaValueParameterSymbol
+import org.jetbrains.kotlin.analysis.api.types.abbreviationOrSelf
 import org.jetbrains.kotlin.fir.symbols.SymbolInternals
 
 class KSValueParameterImpl private constructor(
-    private val ktValueParameterSymbol: KtValueParameterSymbol,
+    private val ktValueParameterSymbol: KaValueParameterSymbol,
     override val parent: KSAnnotated
-) : KSValueParameter {
-    companion object : KSObjectCache<KtValueParameterSymbol, KSValueParameterImpl>() {
-        fun getCached(ktValueParameterSymbol: KtValueParameterSymbol, parent: KSAnnotated) =
+) : KSValueParameter, Deferrable {
+    companion object : KSObjectCache<KaValueParameterSymbol, KSValueParameterImpl>() {
+        fun getCached(ktValueParameterSymbol: KaValueParameterSymbol, parent: KSAnnotated) =
             cache.getOrPut(ktValueParameterSymbol) { KSValueParameterImpl(ktValueParameterSymbol, parent) }
     }
 
     override val name: KSName? by lazy {
         if (origin == Origin.SYNTHETIC && parent is KSPropertySetter) {
-            KSNameImpl.getCached("<set-?>")
+            KSNameImpl.getCached("value")
         } else {
             KSNameImpl.getCached(ktValueParameterSymbol.name.asString())
         }
@@ -47,15 +50,14 @@ class KSValueParameterImpl private constructor(
 
     @OptIn(SymbolInternals::class)
     override val type: KSTypeReference by lazy {
-        // FIXME: temporary workaround before upstream fixes java type refs.
-        if (origin == Origin.JAVA || origin == Origin.JAVA_LIB) {
-            ((ktValueParameterSymbol as KtFirValueParameterSymbol).firSymbol.fir as FirJavaValueParameter).also {
-                // can't get containing class for FirJavaValueParameter, using empty stack for now.
-                it.returnTypeRef =
-                    it.returnTypeRef.resolveIfJavaType(it.moduleData.session, JavaTypeParameterStack.EMPTY)
-            }
-        }
-        KSTypeReferenceImpl.getCached(ktValueParameterSymbol.returnType, this@KSValueParameterImpl)
+        // TODO: avoid eager resolution by using PSI.
+        // KaFirValueParameterSymbol extracts and returns the element type of a vararg.
+        // That logic needs to be replicated if we resolve the PSI via
+        // analyze { KtTypeReference.type }.
+        KSTypeReferenceResolvedImpl.getCached(
+            ktValueParameterSymbol.returnType.abbreviationOrSelf,
+            this@KSValueParameterImpl
+        )
     }
 
     override val isVararg: Boolean by lazy {
@@ -63,26 +65,38 @@ class KSValueParameterImpl private constructor(
     }
 
     override val isNoInline: Boolean
-        get() = TODO("Not yet implemented")
+        get() = ktValueParameterSymbol.isNoinline
 
     override val isCrossInline: Boolean
-        get() = TODO("Not yet implemented")
+        get() = ktValueParameterSymbol.isCrossinline
+
+    private val KaValueParameterSymbol.primaryConstructorProperty: KaPropertySymbol? by lazy {
+        when (ktValueParameterSymbol.origin) {
+            // ktValueParameterSymbol.generatedPrimaryConstructorProperty is always null in libraries.
+            // TODO: fix in AA
+            KaSymbolOrigin.LIBRARY, KaSymbolOrigin.JAVA_LIBRARY -> analyze {
+                val cstr = ktValueParameterSymbol.containingDeclaration as? KaConstructorSymbol
+                val cls = cstr?.containingDeclaration as? KaClassSymbol
+                cls?.declaredMemberScope?.declarations?.filterIsInstance<KaPropertySymbol>()
+                    ?.firstOrNull { it.name == ktValueParameterSymbol.name }
+            }
+
+            else -> ktValueParameterSymbol.generatedPrimaryConstructorProperty
+        }
+    }
 
     override val isVal: Boolean
-        get() = TODO("Not yet implemented")
+        get() = ktValueParameterSymbol.primaryConstructorProperty?.isVal == true
 
     override val isVar: Boolean
-        get() = TODO("Not yet implemented")
+        get() = ktValueParameterSymbol.primaryConstructorProperty?.isVal == false
 
     override val hasDefault: Boolean by lazy {
         ktValueParameterSymbol.hasDefaultValue
     }
 
-    override val annotations: Sequence<KSAnnotation> by lazy {
-        (
-            ktValueParameterSymbol.generatedPrimaryConstructorProperty?.annotations()
-                ?: ktValueParameterSymbol.annotations()
-            ).plus(findAnnotationFromUseSiteTarget())
+    override val annotations: Sequence<KSAnnotation> by lazyMemoizedSequence {
+        ktValueParameterSymbol.annotations(this)
     }
     override val origin: Origin by lazy {
         val symbolOrigin = mapAAOrigin(ktValueParameterSymbol)
@@ -103,5 +117,12 @@ class KSValueParameterImpl private constructor(
 
     override fun toString(): String {
         return name?.asString() ?: "_"
+    }
+
+    override fun defer(): Restorable? {
+        val other = (parent as Deferrable).defer() ?: return null
+        return ktValueParameterSymbol.defer inner@{
+            getCached(it, other.restore() ?: return@inner null)
+        }
     }
 }

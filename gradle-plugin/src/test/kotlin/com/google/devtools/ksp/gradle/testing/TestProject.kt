@@ -23,7 +23,8 @@ import java.io.File
  */
 class TestProject(
     val rootDir: File,
-    val testConfig: TestConfig
+    val testConfig: TestConfig,
+    val useKSP2: Boolean,
 ) {
     val processorModule = TestModule(
         rootDir.resolve("processor")
@@ -59,6 +60,7 @@ class TestProject(
         val contents = """
             
             kotlin.jvm.target.validation.mode=warning
+            ksp.useKSP2=$useKSP2
         """.trimIndent()
         rootDir.resolve("gradle.properties").appendText(contents)
     }
@@ -72,7 +74,7 @@ class TestProject(
                         maven("${testConfig.mavenRepoPath}")
                         gradlePluginPortal()
                         google()
-                        maven("https://maven.pkg.jetbrains.space/kotlin/p/kotlin/bootstrap/")
+                        maven("https://redirector.kotlinlang.org/maven/bootstrap/")
                     }
                 }
         """.trimIndent()
@@ -89,18 +91,18 @@ class TestProject(
 
     private fun writeBuildFile() {
         val rootBuildFile = buildString {
-            appendln("plugins {")
+            appendLine("plugins {")
             val allPlugins = (processorModule.plugins + appModule.plugins).distinct()
             allPlugins.forEach {
-                appendln("""    ${it.text} version "${it.version}" apply false """)
+                appendLine("""    ${it.text} version "${it.version}" apply false """)
             }
-            appendln("}")
-            appendln(
+            appendLine("}")
+            appendLine(
                 """
             repositories {
                 maven("${testConfig.mavenRepoPath}")
                 mavenCentral()
-                maven("https://maven.pkg.jetbrains.space/kotlin/p/kotlin/bootstrap/")
+                maven("https://redirector.kotlinlang.org/maven/bootstrap/")
                 google()
             }
             configurations.all {
@@ -114,7 +116,7 @@ class TestProject(
                 repositories {
                     maven("${testConfig.mavenRepoPath}")
                     mavenCentral()
-                    maven("https://maven.pkg.jetbrains.space/kotlin/p/kotlin/bootstrap/")
+                    maven("https://redirector.kotlinlang.org/maven/bootstrap/")
                     google()
                 }
                 configurations.all {
