@@ -9,7 +9,7 @@ pluginManagement {
     repositories {
         maven(testRepo)
         gradlePluginPortal()
-        maven("https://maven.pkg.jetbrains.space/kotlin/p/kotlin/bootstrap/")
+        maven("https://redirector.kotlinlang.org/maven/bootstrap/")
     }
 }
 
@@ -19,6 +19,7 @@ include(":annotations")
 include(":workload")
 include(":workload-jvm")
 include(":workload-js")
+include(":workload-wasm")
 include(":workload-linuxX64")
 include(":workload-androidNative")
 include(":test-processor")

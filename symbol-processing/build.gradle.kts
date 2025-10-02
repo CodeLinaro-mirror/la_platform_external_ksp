@@ -1,4 +1,5 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import org.gradle.jvm.tasks.Jar
 
 evaluationDependsOn(":common-util")
 evaluationDependsOn(":compiler-plugin")
@@ -9,7 +10,7 @@ val signingPassword: String? by project
 
 plugins {
     kotlin("jvm")
-    id("com.github.johnrengelman.shadow") version "6.0.0"
+    id("com.gradleup.shadow")
     `maven-publish`
     signing
 }
@@ -21,7 +22,11 @@ dependencies {
     packedJars(project(":common-util")) { isTransitive = false }
 }
 
-tasks.withType<ShadowJar>() {
+tasks.withType<Jar> {
+    archiveClassifier.set("real")
+}
+
+tasks.withType<ShadowJar> {
     archiveClassifier.set("")
     // ShadowJar picks up the `compile` configuration by default and pulls stdlib in.
     // Therefore, specifying another configuration instead.
@@ -29,20 +34,23 @@ tasks.withType<ShadowJar>() {
     relocate("com.intellij", "org.jetbrains.kotlin.com.intellij")
 }
 
-tasks {
-    publish {
-        dependsOn(shadowJar)
-        dependsOn(project(":compiler-plugin").tasks["dokkaJavadocJar"])
-        dependsOn(project(":compiler-plugin").tasks["sourcesJar"])
-    }
+val sourcesJar = tasks.register<Jar>("sourcesJar") {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    archiveClassifier.set("sources")
+    from(project(":kotlin-analysis-api").sourceSets.main.get().allSource)
+}
+val javadocJar = tasks.register<Jar>("javadocJar") {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    archiveClassifier.set("javadoc")
+    from(project(":compiler-plugin").tasks["dokkaJavadocJar"])
 }
 
 publishing {
     publications {
         create<MavenPublication>("shadow") {
             artifactId = "symbol-processing"
-            artifact(project(":compiler-plugin").tasks["dokkaJavadocJar"])
-            artifact(project(":compiler-plugin").tasks["sourcesJar"])
+            artifact(javadocJar)
+            artifact(sourcesJar)
             artifact(tasks["shadowJar"])
             pom {
                 name.set("com.google.devtools.ksp:symbol-processing")
@@ -67,7 +75,7 @@ publishing {
 
                     asNode().appendNode("dependencies").apply {
                         addDependency("org.jetbrains.kotlin", "kotlin-stdlib", kotlinBaseVersion)
-                        addDependency("org.jetbrains.kotlin", "kotlin-compiler-embeddable", kotlinBaseVersion)
+                        addDependency("org.jetbrains.kotlinx", "kotlinx-serialization-json", "1.6.3")
                         addDependency("com.google.devtools.ksp", "symbol-processing-api", version)
                     }
                 }

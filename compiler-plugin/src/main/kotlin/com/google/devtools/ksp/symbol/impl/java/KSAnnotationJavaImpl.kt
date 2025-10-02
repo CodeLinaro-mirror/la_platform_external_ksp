@@ -17,9 +17,9 @@
 
 package com.google.devtools.ksp.symbol.impl.java
 
-import com.google.devtools.ksp.KSObjectCache
+import com.google.devtools.ksp.common.impl.KSNameImpl
 import com.google.devtools.ksp.getClassDeclarationByName
-import com.google.devtools.ksp.processing.impl.KSNameImpl
+import com.google.devtools.ksp.processing.impl.KSObjectCache
 import com.google.devtools.ksp.processing.impl.ResolverImpl
 import com.google.devtools.ksp.symbol.*
 import com.google.devtools.ksp.symbol.impl.binary.getAbsentDefaultArguments
@@ -54,7 +54,7 @@ class KSAnnotationJavaImpl private constructor(val psi: PsiAnnotation) : KSAnnot
             is PsiJavaFile -> KSFileJavaImpl.getCached(parentPsi)
             is PsiClass -> KSClassDeclarationJavaImpl.getCached(parentPsi)
             is PsiMethod -> KSFunctionDeclarationJavaImpl.getCached(parentPsi)
-            is PsiParameter -> KSValueParameterJavaImpl.getCached(parentPsi)
+            is PsiParameter -> KSValueParameterJavaImpl.getCached(parentPsi, this)
             is PsiTypeParameter -> KSTypeParameterJavaImpl.getCached(parentPsi)
             is PsiType ->
                 if (parentPsi.parent is PsiClassType) KSTypeArgumentJavaImpl.getCached(parentPsi, this)

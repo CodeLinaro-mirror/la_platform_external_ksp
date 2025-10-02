@@ -73,7 +73,7 @@ fun Resolver.getPropertyDeclarationByName(name: String, includeTopLevel: Boolean
 /**
  * Find the containing file of a KSNode.
  * @return KSFile if the given KSNode has a containing file.
- * exmample of symbols without a containing file: symbols from class files, synthetic symbols craeted by user.
+ * example of symbols without a containing file: symbols from class files, synthetic symbols created by user.
  */
 val KSNode.containingFile: KSFile?
     get() {
@@ -155,6 +155,10 @@ fun KSDeclaration.getVisibility(): Visibility {
         this.modifiers.contains(Modifier.PROTECTED) ||
             this.modifiers.contains(Modifier.OVERRIDE) -> Visibility.PROTECTED
         this.modifiers.contains(Modifier.INTERNAL) -> Visibility.INTERNAL
+        // for synthetic origin from Java source, synthetic members follow visibility from parent to avoid
+        // package private synthetic members being mishandled as public.
+        this.origin == Origin.SYNTHETIC && this.parentDeclaration?.origin == Origin.JAVA ->
+            this.parentDeclaration!!.getVisibility()
         else -> if (this.origin != Origin.JAVA && this.origin != Origin.JAVA_LIB)
             Visibility.PUBLIC else Visibility.JAVA_PACKAGE
     }
@@ -209,7 +213,7 @@ fun KSPropertyDeclaration.isAbstract(): Boolean {
         (setter?.modifiers?.contains(Modifier.ABSTRACT) ?: true)
 }
 
-fun KSDeclaration.isOpen() = !this.isLocal() &&
+fun KSDeclaration.isOpen() = !this.isLocal() && !this.modifiers.contains(Modifier.FINAL) &&
     (
         (this as? KSClassDeclaration)?.classKind == ClassKind.INTERFACE ||
             this.modifiers.contains(Modifier.OVERRIDE) ||
@@ -371,6 +375,16 @@ private fun KSAnnotation.createInvocationHandler(clazz: Class<*>): InvocationHan
                 }
                 else -> {
                     when {
+                        // Workaround for java annotation value array type
+                        // https://github.com/google/ksp/issues/1329
+                        method.returnType.isArray -> {
+                            if (result !is Array<*>) {
+                                val value = { result.asArray(method, clazz) }
+                                cache.getOrPut(Pair(method.returnType, value), value)
+                            } else {
+                                throw IllegalStateException("unhandled value type, $ExceptionMessage")
+                            }
+                        }
                         method.returnType.isEnum -> {
                             val value = { result.asEnum(method.returnType) }
                             cache.getOrPut(Pair(method.returnType, result), value)
@@ -480,6 +494,8 @@ private fun <T> Any.asEnum(returnType: Class<T>): T =
             null,
             if (this is KSType) {
                 this.declaration.simpleName.getShortName()
+            } else if (this is KSClassDeclaration) {
+                this.simpleName.getShortName()
             } else {
                 this.toString()
             }
@@ -504,7 +520,7 @@ class KSTypesNotPresentException(val ksTypes: List<KSType>, cause: Throwable) : 
 
 @KspExperimental
 private fun KSType.asClass(proxyClass: Class<*>) = try {
-    Class.forName(this.declaration.qualifiedName!!.asString(), true, proxyClass.classLoader)
+    Class.forName(this.declaration.toJavaClassName(), true, proxyClass.classLoader)
 } catch (e: Exception) {
     throw KSTypeNotPresentException(this, e)
 }
@@ -517,3 +533,31 @@ private fun List<KSType>.asClasses(proxyClass: Class<*>) = try {
 }
 
 fun KSValueArgument.isDefault() = origin == Origin.SYNTHETIC
+
+@KspExperimental
+private fun Any.asArray(method: Method, proxyClass: Class<*>) = listOf(this).asArray(method, proxyClass)
+
+private fun KSDeclaration.toJavaClassName(): String {
+    val nameDelimiter = '.'
+    val packageNameString = packageName.asString()
+    val qualifiedNameString = qualifiedName!!.asString()
+    val simpleNames = qualifiedNameString
+        .removePrefix("${packageNameString}$nameDelimiter")
+        .split(nameDelimiter)
+
+    return if (simpleNames.size > 1) {
+        buildString {
+            append(packageNameString)
+            append(nameDelimiter)
+
+            simpleNames.forEachIndexed { index, s ->
+                if (index > 0) {
+                    append('$')
+                }
+                append(s)
+            }
+        }
+    } else {
+        qualifiedNameString
+    }
+}
