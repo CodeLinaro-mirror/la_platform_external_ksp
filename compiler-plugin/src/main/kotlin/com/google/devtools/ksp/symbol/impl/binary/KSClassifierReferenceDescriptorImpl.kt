@@ -17,7 +17,7 @@
 
 package com.google.devtools.ksp.symbol.impl.binary
 
-import com.google.devtools.ksp.KSObjectCache
+import com.google.devtools.ksp.processing.impl.KSObjectCache
 import com.google.devtools.ksp.symbol.*
 import org.jetbrains.kotlin.descriptors.ClassifierDescriptor
 import org.jetbrains.kotlin.descriptors.ClassifierDescriptorWithTypeParameters
@@ -68,7 +68,7 @@ class KSClassifierReferenceDescriptorImpl private constructor(
     }
 
     override val typeArguments: List<KSTypeArgument> by lazy {
-        arguments.map { KSTypeArgumentDescriptorImpl.getCached(it, origin, this.parent) }
+        arguments.map { KSTypeArgumentDescriptorImpl.getCached(it, origin, this) }
     }
 
     override fun referencedName(): String {

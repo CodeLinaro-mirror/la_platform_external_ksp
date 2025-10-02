@@ -15,45 +15,64 @@
  * limitations under the License.
  */
 
-@file:Suppress("INVISIBLE_REFERENCE", "INVISIBLE_MEMBER")
 package com.google.devtools.ksp.impl.symbol.kotlin
 
-import com.google.devtools.ksp.KSObjectCache
-import com.google.devtools.ksp.processing.impl.KSNameImpl
+import com.google.devtools.ksp.*
+import com.google.devtools.ksp.common.KSObjectCache
+import com.google.devtools.ksp.common.impl.KSNameImpl
+import com.google.devtools.ksp.common.lazyMemoizedSequence
+import com.google.devtools.ksp.impl.ResolverAAImpl
+import com.google.devtools.ksp.impl.recordLookupForPropertyOrMethod
+import com.google.devtools.ksp.impl.recordLookupWithSupertypes
+import com.google.devtools.ksp.impl.symbol.kotlin.resolved.KSTypeReferenceResolvedImpl
 import com.google.devtools.ksp.symbol.*
 import com.intellij.psi.PsiClass
-import org.jetbrains.kotlin.analysis.api.fir.symbols.KtFirFunctionSymbol
+import com.intellij.psi.PsiMethod
 import org.jetbrains.kotlin.analysis.api.symbols.*
-import org.jetbrains.kotlin.analysis.api.symbols.markers.KtSymbolKind
-import org.jetbrains.kotlin.descriptors.Modality
-import org.jetbrains.kotlin.fir.java.declarations.FirJavaClass
-import org.jetbrains.kotlin.fir.java.declarations.FirJavaMethod
-import org.jetbrains.kotlin.fir.java.resolveIfJavaType
-import org.jetbrains.kotlin.fir.resolve.getContainingClass
-import org.jetbrains.kotlin.fir.symbols.SymbolInternals
+import org.jetbrains.kotlin.analysis.api.types.abbreviationOrSelf
 import org.jetbrains.kotlin.psi.KtDeclaration
 import org.jetbrains.kotlin.psi.KtFunction
 
-class KSFunctionDeclarationImpl private constructor(internal val ktFunctionSymbol: KtFunctionLikeSymbol) :
+class KSFunctionDeclarationImpl private constructor(internal val ktFunctionSymbol: KaFunctionSymbol) :
     KSFunctionDeclaration,
     AbstractKSDeclarationImpl(ktFunctionSymbol),
     KSExpectActual by KSExpectActualImpl(ktFunctionSymbol) {
-    companion object : KSObjectCache<KtFunctionLikeSymbol, KSFunctionDeclarationImpl>() {
-        fun getCached(ktFunctionSymbol: KtFunctionLikeSymbol) =
+    companion object : KSObjectCache<KaFunctionSymbol, KSFunctionDeclarationImpl>() {
+        fun getCached(ktFunctionSymbol: KaFunctionSymbol) =
             cache.getOrPut(ktFunctionSymbol) { KSFunctionDeclarationImpl(ktFunctionSymbol) }
     }
 
     override val functionKind: FunctionKind by lazy {
-        when (ktFunctionSymbol.symbolKind) {
-            KtSymbolKind.CLASS_MEMBER -> FunctionKind.MEMBER
-            KtSymbolKind.TOP_LEVEL -> FunctionKind.TOP_LEVEL
-            KtSymbolKind.SAM_CONSTRUCTOR -> FunctionKind.LAMBDA
-            else -> throw IllegalStateException("Unexpected symbol kind ${ktFunctionSymbol.symbolKind}")
+        when (ktFunctionSymbol.location) {
+            KaSymbolLocation.CLASS -> {
+                if (ktFunctionSymbol is KaNamedFunctionSymbol && ktFunctionSymbol.isStatic) {
+                    FunctionKind.STATIC
+                } else {
+                    FunctionKind.MEMBER
+                }
+            }
+            KaSymbolLocation.TOP_LEVEL -> FunctionKind.TOP_LEVEL
+            else -> throw IllegalStateException("Unexpected location ${ktFunctionSymbol.location}")
         }
     }
 
     override val isAbstract: Boolean by lazy {
-        (ktFunctionSymbol as? KtFunctionSymbol)?.modality == Modality.ABSTRACT
+        (ktFunctionSymbol as? KaNamedFunctionSymbol)?.modality == KaSymbolModality.ABSTRACT
+    }
+
+    override val modifiers: Set<Modifier> by lazy {
+        if (isConstructor()) {
+            val ksClassDeclaration = parentDeclaration as KSClassDeclaration
+            if (ksClassDeclaration.classKind == ClassKind.ENUM_CLASS) {
+                setOf(Modifier.FINAL, Modifier.PRIVATE)
+            } else if (isSyntheticConstructor() && ksClassDeclaration.isPublic()) {
+                setOf(Modifier.FINAL, Modifier.PUBLIC)
+            } else {
+                super.modifiers + Modifier.FINAL
+            }
+        } else {
+            super.modifiers
+        }
     }
 
     override val extensionReceiver: KSTypeReference? by lazy {
@@ -61,34 +80,38 @@ class KSFunctionDeclarationImpl private constructor(internal val ktFunctionSymbo
             if (!ktFunctionSymbol.isExtension) {
                 null
             } else {
-                ktFunctionSymbol.receiverType?.let {
-                    KSTypeReferenceImpl.getCached(it, this@KSFunctionDeclarationImpl)
-                }
+                (ktFunctionSymbol.psiIfSource() as? KtFunction)?.receiverTypeReference
+                    ?.let {
+                        // receivers are modeled as parameter in AA therefore annotations are stored in
+                        // the corresponding receiver parameter, need to pass it to the `KSTypeReferenceImpl`
+                        KSTypeReferenceImpl.getCached(
+                            it,
+                            this@KSFunctionDeclarationImpl,
+                            ktFunctionSymbol.receiverParameter?.annotations ?: emptyList()
+                        )
+                    }
+                    ?: ktFunctionSymbol.receiverType?.abbreviationOrSelf?.let {
+                        KSTypeReferenceResolvedImpl.getCached(
+                            it,
+                            this@KSFunctionDeclarationImpl,
+                            -1,
+                            ktFunctionSymbol.receiverParameter?.annotations ?: emptyList()
+                        )
+                    }
             }
         }
     }
 
-    @OptIn(SymbolInternals::class)
     override val returnType: KSTypeReference? by lazy {
-        // FIXME: temporary workaround before upstream fixes java type refs.
-        if (origin == Origin.JAVA) {
-            if (ktFunctionSymbol is KtFirFunctionSymbol) {
-                (ktFunctionSymbol.firSymbol.fir as? FirJavaMethod)?.also {
-                    it.returnTypeRef = it.returnTypeRef.resolveIfJavaType(
-                        it.moduleData.session,
-                        (it.getContainingClass(it.moduleData.session) as FirJavaClass).javaTypeParameterStack
-                    )
-                }
+        (ktFunctionSymbol.psiIfSource() as? KtFunction)?.typeReference?.let { KSTypeReferenceImpl.getCached(it, this) }
+            ?: analyze {
+                // Constructors
+                if (ktFunctionSymbol is KaConstructorSymbol) {
+                    ((parentDeclaration as KSClassDeclaration).asStarProjectedType() as KSTypeImpl).type
+                } else {
+                    ktFunctionSymbol.returnType.abbreviationOrSelf
+                }.let { KSTypeReferenceResolvedImpl.getCached(it, this@KSFunctionDeclarationImpl) }
             }
-        }
-        analyze {
-            // Constructors
-            if (ktFunctionSymbol is KtConstructorSymbol) {
-                ((parentDeclaration as KSClassDeclaration).asStarProjectedType() as KSTypeImpl).type
-            } else {
-                ktFunctionSymbol.returnType
-            }.let { KSTypeReferenceImpl.getCached(it, this@KSFunctionDeclarationImpl) }
-        }
     }
 
     override val parameters: List<KSValueParameter> by lazy {
@@ -96,46 +119,86 @@ class KSFunctionDeclarationImpl private constructor(internal val ktFunctionSymbo
     }
 
     override fun findOverridee(): KSDeclaration? {
-        TODO("Not yet implemented")
+        closestClassDeclaration()?.asStarProjectedType()?.let {
+            recordLookupWithSupertypes((it as KSTypeImpl).type)
+        }
+        recordLookupForPropertyOrMethod(this)
+        return analyze {
+            if (ktFunctionSymbol is KaPropertyAccessorSymbol) {
+                (parentDeclaration as? KSPropertyDeclarationImpl)?.ktPropertySymbol
+            } else {
+                ktFunctionSymbol
+            }?.directlyOverriddenSymbols?.firstOrNull()?.fakeOverrideOriginal?.toKSDeclaration()
+        }?.also { recordLookupForPropertyOrMethod(it) }
     }
 
     override fun asMemberOf(containing: KSType): KSFunction {
-        TODO("Not yet implemented")
+        return ResolverAAImpl.instance.computeAsMemberOf(this, containing)
     }
 
     override val simpleName: KSName by lazy {
-        if (ktFunctionSymbol is KtFunctionSymbol) {
-            KSNameImpl.getCached(ktFunctionSymbol.name.asString())
-        } else {
-            KSNameImpl.getCached("<init>")
+        when (ktFunctionSymbol) {
+            is KaNamedFunctionSymbol -> KSNameImpl.getCached(ktFunctionSymbol.name.asString())
+            is KaPropertyAccessorSymbol -> when (val psi = ktFunctionSymbol.psi) {
+                is PsiMethod -> KSNameImpl.getCached(psi.name)
+                else -> KSNameImpl.getCached(ktFunctionSymbol.callableId?.callableName?.asString() ?: "<no name>")
+            }
+            is KaConstructorSymbol -> KSNameImpl.getCached("<init>")
+            else -> throw IllegalStateException("Unexpected function symbol type ${ktFunctionSymbol.javaClass}")
         }
     }
 
     override val qualifiedName: KSName? by lazy {
-        KSNameImpl.getCached("${parentDeclaration?.qualifiedName?.asString()}.${this.simpleName.asString()}")
+        ktFunctionSymbol.callableId?.asSingleFqName()?.asString()?.let { KSNameImpl.getCached(it) }
     }
 
     override fun <D, R> accept(visitor: KSVisitor<D, R>, data: D): R {
         return visitor.visitFunctionDeclaration(this, data)
     }
 
-    override val declarations: Sequence<KSDeclaration> by lazy {
-        val psi = ktFunctionSymbol.psi as? KtFunction ?: return@lazy emptySequence()
+    override val declarations: Sequence<KSDeclaration> by lazyMemoizedSequence {
+        val psi = ktFunctionSymbol.psi as? KtFunction ?: return@lazyMemoizedSequence emptySequence()
         if (!psi.hasBlockBody()) {
             emptySequence()
         } else {
-            psi.bodyBlockExpression?.statements?.asSequence()?.filterIsInstance<KtDeclaration>()?.mapNotNull {
+            psi.bodyBlockExpression?.statements?.asSequence()?.filterIsInstance<KtDeclaration>()?.flatMap {
                 analyze {
-                    it.getSymbol().toKSDeclaration()
+                    when (val symbol = it.symbol) {
+                        is KaDestructuringDeclarationSymbol -> {
+                            symbol.entries.mapNotNull { it.toKSDeclaration() }
+                        }
+                        else -> listOfNotNull(symbol.toKSDeclaration())
+                    }
                 }
             } ?: emptySequence()
         }
     }
 
-    private fun isSyntheticConstructor(): Boolean {
-        return origin == Origin.SYNTHETIC ||
-            (origin == Origin.JAVA && ktFunctionSymbol.psi == null || ktFunctionSymbol.psi is PsiClass)
+    override val origin: Origin by lazy {
+        // Override origin for java synthetic constructors.
+        if (
+            ktFunctionSymbol.origin == KaSymbolOrigin.JAVA_SOURCE &&
+            (ktFunctionSymbol.psi == null || ktFunctionSymbol.psi is PsiClass)
+        ) {
+            Origin.SYNTHETIC
+        } else {
+            super.origin
+        }
     }
+
+    private fun isSyntheticConstructor(): Boolean {
+        return isConstructor() && (
+            origin == Origin.SYNTHETIC ||
+                (origin == Origin.JAVA && ktFunctionSymbol.psi == null || ktFunctionSymbol.psi is PsiClass)
+            )
+    }
+
+    override val annotations: Sequence<KSAnnotation>
+        get() = if (isSyntheticConstructor()) {
+            emptySequence()
+        } else {
+            super.annotations
+        }
 
     override fun toString(): String {
         // TODO: fix origin for implicit Java constructor in AA
@@ -154,34 +217,60 @@ class KSFunctionDeclarationImpl private constructor(internal val ktFunctionSymbo
             super.docString
         }
     }
+
+    override fun defer(): Restorable? {
+        return ktFunctionSymbol.defer(::getCached)
+    }
 }
 
-internal fun KtFunctionLikeSymbol.toModifiers(): Set<Modifier> {
+internal fun KaFunctionSymbol.toModifiers(): Set<Modifier> {
     val result = mutableSetOf<Modifier>()
-    if (this is KtFunctionSymbol) {
-        result.add(visibility.toModifier())
-        result.add(modality.toModifier())
-        if (isExternal) {
-            result.add(Modifier.EXTERNAL)
+    when (this) {
+        is KaConstructorSymbol -> {
+            if (visibility != KaSymbolVisibility.PACKAGE_PRIVATE) {
+                result.add(visibility.toModifier())
+            }
+            result.add(Modifier.FINAL)
         }
-        if (isInfix) {
-            result.add(Modifier.INFIX)
+        is KaNamedFunctionSymbol -> {
+            if (visibility != KaSymbolVisibility.PACKAGE_PRIVATE) {
+                result.add(visibility.toModifier())
+            }
+            if (!isStatic || modality != KaSymbolModality.OPEN) {
+                result.add(modality.toModifier())
+            }
+            if (isExternal) {
+                result.add(Modifier.EXTERNAL)
+            }
+            if (isInfix) {
+                result.add(Modifier.INFIX)
+            }
+            if (isInline) {
+                result.add(Modifier.INLINE)
+            }
+            if (isStatic) {
+                result.add(Modifier.JAVA_STATIC)
+                result.add(Modifier.FINAL)
+            }
+            if (isSuspend) {
+                result.add(Modifier.SUSPEND)
+            }
+            if (isOperator) {
+                result.add(Modifier.OPERATOR)
+            }
+            if (isOperator) {
+                result.add(Modifier.OVERRIDE)
+            }
         }
-        if (isInline) {
-            result.add(Modifier.INLINE)
+        is KaPropertyAccessorSymbol -> {
+            if (visibility != KaSymbolVisibility.PACKAGE_PRIVATE) {
+                result.add(visibility.toModifier())
+            }
+            if (modality != KaSymbolModality.OPEN) {
+                result.add(modality.toModifier())
+            }
         }
-        if (isStatic) {
-            result.add(Modifier.JAVA_STATIC)
-        }
-        if (isSuspend) {
-            result.add(Modifier.SUSPEND)
-        }
-        if (isOperator) {
-            result.add(Modifier.OPERATOR)
-        }
-        if (isOperator) {
-            result.add(Modifier.OVERRIDE)
-        }
+        else -> Unit
     }
     return result
 }

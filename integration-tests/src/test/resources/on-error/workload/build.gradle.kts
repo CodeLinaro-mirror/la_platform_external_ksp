@@ -10,7 +10,7 @@ version = "1.0-SNAPSHOT"
 repositories {
     maven(testRepo)
     mavenCentral()
-    maven("https://maven.pkg.jetbrains.space/kotlin/p/kotlin/bootstrap/")
+    maven("https://redirector.kotlinlang.org/maven/bootstrap/")
 }
 
 dependencies {
@@ -19,5 +19,5 @@ dependencies {
 }
 
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-    kotlinOptions.freeCompilerArgs += "-opt-in=MyOptIn"
+    compilerOptions.freeCompilerArgs.add("-opt-in=MyOptIn")
 }
