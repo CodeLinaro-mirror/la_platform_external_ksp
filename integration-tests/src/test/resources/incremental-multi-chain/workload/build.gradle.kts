@@ -11,7 +11,7 @@ version = "1.0-SNAPSHOT"
 repositories {
     maven(testRepo)
     mavenCentral()
-    maven("https://maven.pkg.jetbrains.space/kotlin/p/kotlin/bootstrap/")
+    maven("https://redirector.kotlinlang.org/maven/bootstrap/")
 }
 
 dependencies {
@@ -20,5 +20,5 @@ dependencies {
 }
 
 application {
-    mainClassName = "MainKt"
+    mainClass = "MainKt"
 }

@@ -17,258 +17,39 @@
 
 // TEST PROCESSOR: LibOriginsProcessor
 // EXPECTED:
-// annotation: Anno1: KOTLIN_LIB
-// annotation: Anno2: JAVA_LIB
-// annotation: Anno3: KOTLIN
-// annotation: Anno4: JAVA
-// classifier ref: Anno1: KOTLIN_LIB
-// classifier ref: Anno1: KOTLIN_LIB
-// classifier ref: Anno2: JAVA_LIB
-// classifier ref: Anno2: KOTLIN_LIB
-// classifier ref: Anno3: KOTLIN
-// classifier ref: Anno3: KOTLIN_LIB
-// classifier ref: Anno4: JAVA
-// classifier ref: Anno4: KOTLIN_LIB
-// classifier ref: Annotation: KOTLIN_LIB
-// classifier ref: Annotation: KOTLIN_LIB
-// classifier ref: Annotation: KOTLIN_LIB
-// classifier ref: Annotation: KOTLIN_LIB
-// classifier ref: Any: JAVA_LIB
-// classifier ref: Any: JAVA_LIB
-// classifier ref: Any: JAVA_LIB
-// classifier ref: Any: KOTLIN_LIB
-// classifier ref: Any: KOTLIN_LIB
-// classifier ref: Any: KOTLIN_LIB
-// classifier ref: ArrayList<(T2..T2?)>: JAVA_LIB
-// classifier ref: Byte: JAVA_LIB
-// classifier ref: Byte: JAVA_LIB
-// classifier ref: Byte: JAVA_LIB
-// classifier ref: Int: KOTLIN_LIB
-// classifier ref: Int: KOTLIN_LIB
-// classifier ref: Int: KOTLIN_LIB
-// classifier ref: Int: KOTLIN_LIB
-// classifier ref: Int: KOTLIN_LIB
-// classifier ref: Int: KOTLIN_LIB
-// classifier ref: Int: KOTLIN_LIB
-// classifier ref: Int: KOTLIN_LIB
-// classifier ref: Int: KOTLIN_LIB
-// classifier ref: Int: KOTLIN_LIB
-// classifier ref: Int: KOTLIN_LIB
-// classifier ref: Int: KOTLIN_LIB
-// classifier ref: JavaLib: JAVA_LIB
-// classifier ref: JavaLib: JAVA_LIB
-// classifier ref: JavaLib: JAVA_LIB
-// classifier ref: JavaLib<T2>: JAVA_LIB
-// classifier ref: KotlinLibClass: KOTLIN_LIB
-// classifier ref: KotlinLibClass: KOTLIN_LIB
-// classifier ref: KotlinLibClass: KOTLIN_LIB
-// classifier ref: KotlinLibClass: KOTLIN_LIB
-// classifier ref: KotlinLibClass: KOTLIN_LIB
-// classifier ref: KotlinLibClass: KOTLIN_LIB
-// classifier ref: KotlinLibClass<T1>: KOTLIN_LIB
-// classifier ref: KotlinSrcClass: SYNTHETIC
-// classifier ref: List<Int>: KOTLIN_LIB
-// classifier ref: List<T1>: KOTLIN_LIB
-// classifier ref: List<T1>: KOTLIN_LIB
-// classifier ref: List<T1>: KOTLIN_LIB
-// classifier ref: List<T1>: KOTLIN_LIB
-// classifier ref: Long: JAVA
-// classifier ref: Long: JAVA
-// classifier ref: Long: JAVA
-// classifier ref: Object: JAVA
-// classifier ref: Set: KOTLIN
-// classifier ref: Set: KOTLIN
-// classifier ref: Set: KOTLIN
-// classifier ref: Set: KOTLIN
-// classifier ref: Set<T3>: SYNTHETIC
-// classifier ref: Short: KOTLIN
-// classifier ref: Short: KOTLIN
-// classifier ref: Short: KOTLIN
-// classifier ref: Short: KOTLIN
-// classifier ref: Short: KOTLIN
-// classifier ref: Short: KOTLIN
-// classifier ref: Short: KOTLIN
-// classifier ref: Short: KOTLIN
-// classifier ref: Short: KOTLIN
-// classifier ref: Short: SYNTHETIC
-// classifier ref: Short: SYNTHETIC
-// classifier ref: Short: SYNTHETIC
-// classifier ref: T1: KOTLIN_LIB
-// classifier ref: T1: KOTLIN_LIB
-// classifier ref: T1: KOTLIN_LIB
-// classifier ref: T1: KOTLIN_LIB
-// classifier ref: T1: KOTLIN_LIB
-// classifier ref: T1: KOTLIN_LIB
-// classifier ref: T2: JAVA_LIB
-// classifier ref: T2: JAVA_LIB
-// classifier ref: T2: JAVA_LIB
-// classifier ref: T3: KOTLIN
-// classifier ref: T3: KOTLIN
-// classifier ref: T3: KOTLIN
-// classifier ref: T3: KOTLIN
-// classifier ref: T3: SYNTHETIC
-// classifier ref: T4: JAVA
-// classifier ref: T4: JAVA
-// declaration: <init>: KOTLIN
-// declaration: foo.bar.Anno1.<init>: KOTLIN_LIB
-// declaration: foo.bar.Anno1: KOTLIN_LIB
-// declaration: foo.bar.Anno2.<init>: KOTLIN_LIB
-// declaration: foo.bar.Anno2: KOTLIN_LIB
-// declaration: foo.bar.Anno3.<init>: KOTLIN_LIB
-// declaration: foo.bar.Anno3: KOTLIN_LIB
-// declaration: foo.bar.Anno4.<init>: KOTLIN_LIB
-// declaration: foo.bar.Anno4: KOTLIN_LIB
-// declaration: foo.bar.JavaLib.<init>: JAVA_LIB
-// declaration: foo.bar.JavaLib.T2: JAVA_LIB
-// declaration: foo.bar.JavaLib.T2: JAVA_LIB
-// declaration: foo.bar.JavaLib.f1: JAVA_LIB
-// declaration: foo.bar.JavaLib.javaLibField: JAVA_LIB
-// declaration: foo.bar.JavaLib.javaLibFunction: JAVA_LIB
-// declaration: foo.bar.JavaLib: JAVA_LIB
-// declaration: foo.bar.JavaSrc.<init>: SYNTHETIC
-// declaration: foo.bar.JavaSrc.LinkedList: JAVA
-// declaration: foo.bar.JavaSrc.f2: JAVA
-// declaration: foo.bar.JavaSrc.javaSrcField: JAVA
-// declaration: foo.bar.JavaSrc.javaSrcFunction: JAVA
-// declaration: foo.bar.JavaSrc.p0: JAVA
-// declaration: foo.bar.JavaSrc: JAVA
-// declaration: foo.bar.KotlinLibClass.<init>: KOTLIN_LIB
-// declaration: foo.bar.KotlinLibClass.T1: KOTLIN_LIB
-// declaration: foo.bar.KotlinLibClass.T1: KOTLIN_LIB
-// declaration: foo.bar.KotlinLibClass.f1: KOTLIN_LIB
-// declaration: foo.bar.KotlinLibClass.f2: KOTLIN_LIB
-// declaration: foo.bar.KotlinLibClass.f3: KOTLIN_LIB
-// declaration: foo.bar.KotlinLibClass.p1: KOTLIN_LIB
-// declaration: foo.bar.KotlinLibClass.p2: KOTLIN_LIB
-// declaration: foo.bar.KotlinLibClass.p3: KOTLIN_LIB
-// declaration: foo.bar.KotlinLibClass: KOTLIN_LIB
-// declaration: foo.bar.KotlinSrcClass.T3: KOTLIN
-// declaration: foo.bar.KotlinSrcClass.g1: KOTLIN
-// declaration: foo.bar.KotlinSrcClass.g2: KOTLIN
-// declaration: foo.bar.KotlinSrcClass.g3: KOTLIN
-// declaration: foo.bar.KotlinSrcClass.q1: KOTLIN
-// declaration: foo.bar.KotlinSrcClass.q2: KOTLIN
-// declaration: foo.bar.KotlinSrcClass.q3: KOTLIN
-// declaration: foo.bar.KotlinSrcClass: KOTLIN
-// declaration: foo.bar.kotlinLibFuntion: KOTLIN_LIB
-// declaration: foo.bar.kotlinLibProperty: KOTLIN_LIB
-// declaration: foo.bar.kotlinSrcFuntion: KOTLIN
-// declaration: foo.bar.kotlinSrcProperty: KOTLIN
-// property accessor: kotlinLibProperty.getter(): KOTLIN_LIB
-// property accessor: kotlinSrcProperty.getter(): SYNTHETIC
-// property accessor: p1.getter(): KOTLIN_LIB
-// property accessor: p2.getter(): KOTLIN_LIB
-// property accessor: p3.getter(): KOTLIN_LIB
-// property accessor: q1.getter(): SYNTHETIC
-// property accessor: q2.getter(): SYNTHETIC
-// property accessor: q3.getter(): SYNTHETIC
-// reference: Anno1: KOTLIN_LIB
-// reference: Anno1: KOTLIN_LIB
-// reference: Anno2: JAVA_LIB
-// reference: Anno2: KOTLIN_LIB
-// reference: Anno3: KOTLIN
-// reference: Anno3: KOTLIN_LIB
-// reference: Anno4: JAVA
-// reference: Anno4: KOTLIN_LIB
-// reference: Annotation: KOTLIN_LIB
-// reference: Annotation: KOTLIN_LIB
-// reference: Annotation: KOTLIN_LIB
-// reference: Annotation: KOTLIN_LIB
-// reference: Any: JAVA_LIB
-// reference: Any: JAVA_LIB
-// reference: Any: JAVA_LIB
-// reference: Any: KOTLIN_LIB
-// reference: Any: KOTLIN_LIB
-// reference: Any: KOTLIN_LIB
-// reference: Any: SYNTHETIC
-// reference: Any?: SYNTHETIC
-// reference: ArrayList<(T2..T2?)>: JAVA_LIB
-// reference: Byte: JAVA_LIB
-// reference: Byte: JAVA_LIB
-// reference: Byte: JAVA_LIB
-// reference: Int: KOTLIN_LIB
-// reference: Int: KOTLIN_LIB
-// reference: Int: KOTLIN_LIB
-// reference: Int: KOTLIN_LIB
-// reference: Int: KOTLIN_LIB
-// reference: Int: KOTLIN_LIB
-// reference: Int: KOTLIN_LIB
-// reference: Int: KOTLIN_LIB
-// reference: Int: KOTLIN_LIB
-// reference: Int: KOTLIN_LIB
-// reference: Int: KOTLIN_LIB
-// reference: Int: KOTLIN_LIB
-// reference: JavaLib<T2>: JAVA_LIB
-// reference: JavaSrc: SYNTHETIC
-// reference: KotlinLibClass<T1>: KOTLIN_LIB
-// reference: KotlinSrcClass<T3>: KOTLIN
-// reference: List<Int>: KOTLIN_LIB
-// reference: List<T1>: KOTLIN_LIB
-// reference: List<T1>: KOTLIN_LIB
-// reference: List<T1>: KOTLIN_LIB
-// reference: List<T1>: KOTLIN_LIB
-// reference: Long: JAVA
-// reference: Long: JAVA
-// reference: Long: JAVA
-// reference: Object: JAVA
-// reference: Set: KOTLIN
-// reference: Set: KOTLIN
-// reference: Set: KOTLIN
-// reference: Set: KOTLIN
-// reference: Set<T3>: SYNTHETIC
-// reference: Short: KOTLIN
-// reference: Short: KOTLIN
-// reference: Short: KOTLIN
-// reference: Short: KOTLIN
-// reference: Short: KOTLIN
-// reference: Short: KOTLIN
-// reference: Short: KOTLIN
-// reference: Short: KOTLIN
-// reference: Short: KOTLIN
-// reference: Short: SYNTHETIC
-// reference: Short: SYNTHETIC
-// reference: Short: SYNTHETIC
-// reference: T1: KOTLIN_LIB
-// reference: T1: KOTLIN_LIB
-// reference: T1: KOTLIN_LIB
-// reference: T1: KOTLIN_LIB
-// reference: T1: KOTLIN_LIB
-// reference: T1: KOTLIN_LIB
-// reference: T2: JAVA_LIB
-// reference: T2: JAVA_LIB
-// reference: T2: JAVA_LIB
-// reference: T3: KOTLIN
-// reference: T3: KOTLIN
-// reference: T3: KOTLIN
-// reference: T3: KOTLIN
-// reference: T3: SYNTHETIC
-// reference: T4: JAVA
-// reference: T4: JAVA
-// type arg: INVARIANT Int: KOTLIN_LIB
-// type arg: INVARIANT Short: KOTLIN
-// type arg: INVARIANT T1: KOTLIN_LIB
-// type arg: INVARIANT T1: KOTLIN_LIB
-// type arg: INVARIANT T1: KOTLIN_LIB
-// type arg: INVARIANT T1: KOTLIN_LIB
-// type arg: INVARIANT T1: KOTLIN_LIB
-// type arg: INVARIANT T2: JAVA_LIB
-// type arg: INVARIANT T2: JAVA_LIB
-// type arg: INVARIANT T3: KOTLIN
-// type arg: INVARIANT T3: KOTLIN
-// type arg: INVARIANT T3: KOTLIN
-// type arg: INVARIANT T3: SYNTHETIC
-// value param: p0: JAVA_LIB
-// value param: p1: JAVA_LIB
-// value param: p1: KOTLIN_LIB
-// value param: p2: KOTLIN_LIB
-// value param: p4: KOTLIN_LIB
-// value param: p5: KOTLIN_LIB
-// value param: p6: KOTLIN_LIB
-// value param: q1: KOTLIN
-// value param: q2: KOTLIN
-// value param: q4: KOTLIN
-// value param: q5: KOTLIN
-// value param: q6: KOTLIN
+// Validating Anno1
+// Validating Anno2
+// Validating Anno3
+// Validating Anno4
+// Validating Anno5
+// Validating JavaLib
+// Validating KotlinLibClass
+// Validating kotlinLibFuntion
+// Validating kotlinLibProperty
+// Validating File: JavaSrc.java
+// Exception: [File: JavaSrc.java, JavaSrc, synthetic constructor for JavaSrc, JavaSrc]: SYNTHETIC
+// Exception: [File: JavaSrc.java, JavaSrc, synthetic constructor for JavaSrc]: SYNTHETIC
+// Exception: [File: JavaSrc.java, JavaAnno1, synthetic constructor for JavaAnno1, JavaAnno1]: SYNTHETIC
+// Exception: [File: JavaSrc.java, JavaAnno1, synthetic constructor for JavaAnno1]: SYNTHETIC
+// Validating File: KotlinSrc.kt
+// Exception: [File: KotlinSrc.kt, kotlinSrcProperty, kotlinSrcProperty.getter(), Short, Short]: SYNTHETIC
+// Exception: [File: KotlinSrc.kt, kotlinSrcProperty, kotlinSrcProperty.getter(), Short]: SYNTHETIC
+// Exception: [File: KotlinSrc.kt, kotlinSrcProperty, kotlinSrcProperty.getter()]: SYNTHETIC
+// Exception: [File: KotlinSrc.kt, KotlinSrcClass, Any]: SYNTHETIC
+// Exception: [File: KotlinSrc.kt, KotlinSrcClass, T3, Any?]: SYNTHETIC
+// Exception: [File: KotlinSrc.kt, KotlinSrcClass, <init>, q1, q1.getter(), Set<T3>, Set<T3>, INVARIANT T3, T3, KotlinSrcClass]: SYNTHETIC
+// Exception: [File: KotlinSrc.kt, KotlinSrcClass, <init>, q1, q1.getter(), Set<T3>, Set<T3>, INVARIANT T3, T3, T3]: SYNTHETIC
+// Exception: [File: KotlinSrc.kt, KotlinSrcClass, <init>, q1, q1.getter(), Set<T3>, Set<T3>, INVARIANT T3, T3]: SYNTHETIC
+// Exception: [File: KotlinSrc.kt, KotlinSrcClass, <init>, q1, q1.getter(), Set<T3>, Set<T3>, INVARIANT T3]: SYNTHETIC
+// Exception: [File: KotlinSrc.kt, KotlinSrcClass, <init>, q1, q1.getter(), Set<T3>, Set<T3>]: SYNTHETIC
+// Exception: [File: KotlinSrc.kt, KotlinSrcClass, <init>, q1, q1.getter(), Set<T3>]: SYNTHETIC
+// Exception: [File: KotlinSrc.kt, KotlinSrcClass, <init>, q1, q1.getter()]: SYNTHETIC
+// Exception: [File: KotlinSrc.kt, KotlinSrcClass, <init>, q2, q2.getter(), Short, Short]: SYNTHETIC
+// Exception: [File: KotlinSrc.kt, KotlinSrcClass, <init>, q2, q2.getter(), Short]: SYNTHETIC
+// Exception: [File: KotlinSrc.kt, KotlinSrcClass, <init>, q2, q2.getter()]: SYNTHETIC
+// Exception: [File: KotlinSrc.kt, KotlinSrcClass, q3, q3.getter(), Short, Short]: SYNTHETIC
+// Exception: [File: KotlinSrc.kt, KotlinSrcClass, q3, q3.getter(), Short]: SYNTHETIC
+// Exception: [File: KotlinSrc.kt, KotlinSrcClass, q3, q3.getter()]: SYNTHETIC
 // END
 // MODULE: module1
 // FILE: KotlinLib.kt
@@ -281,6 +62,7 @@ annotation class Anno1
 annotation class Anno2
 annotation class Anno3
 annotation class Anno4
+annotation class Anno5(val p1: Int = 42, val p2: String = "default")
 
 @Anno1
 class KotlinLibClass<T1>(val p1: List<T1>, val p2: Int)  {
@@ -336,3 +118,7 @@ class JavaSrc {
     }
 }
 
+public @interface JavaAnno1 {
+    @Anno5(p1 = 1, p2 = "a2")
+    String value ();
+}
