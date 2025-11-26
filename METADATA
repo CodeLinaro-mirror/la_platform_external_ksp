@@ -9,12 +9,12 @@ third_party {
   last_upgrade_date {
     year: 2025
     month: 9
-    day: 3
+    day: 4
   }
   homepage: "https://kotlinlang.org/docs/ksp-overview.html"
   identifier {
-    type: "Git"
-    value: "https://github.com/google/ksp"
+    type: "Archive"
+    value: "https://github.com/google/ksp/releases/download/2.2.10-2.0.2/artifacts.zip"
     version: "2.2.10-2.0.2"
   }
 }
