@@ -17,8 +17,9 @@
 
 package com.google.devtools.ksp.impl.symbol.kotlin
 
-import com.google.devtools.ksp.KSObjectCache
-import com.google.devtools.ksp.processing.impl.KSNameImpl
+import com.google.devtools.ksp.common.KSObjectCache
+import com.google.devtools.ksp.common.impl.KSNameImpl
+import com.google.devtools.ksp.common.lazyMemoizedSequence
 import com.google.devtools.ksp.symbol.KSAnnotation
 import com.google.devtools.ksp.symbol.KSDeclaration
 import com.google.devtools.ksp.symbol.KSFile
@@ -29,28 +30,32 @@ import com.google.devtools.ksp.symbol.Location
 import com.google.devtools.ksp.symbol.Origin
 import com.intellij.psi.PsiJavaFile
 
-class KSFileJavaImpl private constructor(private val psi: PsiJavaFile) : KSFile {
+class KSFileJavaImpl private constructor(val psi: PsiJavaFile) : KSFile, Deferrable {
     companion object : KSObjectCache<PsiJavaFile, KSFileJavaImpl>() {
         fun getCached(psi: PsiJavaFile) = cache.getOrPut(psi) { KSFileJavaImpl(psi) }
     }
 
-    override val packageName: KSName = KSNameImpl.getCached(psi.packageName)
+    override val packageName: KSName by lazy {
+        KSNameImpl.getCached(psi.packageName)
+    }
 
     override val fileName: String = psi.name
 
     override val filePath: String = psi.virtualFile.path
 
-    override val declarations: Sequence<KSDeclaration> by lazy {
+    override val declarations: Sequence<KSDeclaration> by lazyMemoizedSequence {
         psi.classes.asSequence().mapNotNull { psi ->
             analyze {
-                psi.getNamedClassSymbol()?.let { KSClassDeclarationImpl.getCached(it) }
+                psi.namedClassSymbol?.let { KSClassDeclarationImpl.getCached(it) }
             }
         }
     }
 
     override val origin: Origin = Origin.JAVA
 
-    override val location: Location = psi.toLocation()
+    override val location: Location by lazy {
+        psi.toLocation()
+    }
 
     override val parent: KSNode? = null
 
@@ -62,5 +67,13 @@ class KSFileJavaImpl private constructor(private val psi: PsiJavaFile) : KSFile 
 
     override fun toString(): String {
         return "File: ${this.fileName}"
+    }
+
+    // Although Resolver.getSymbolsWithAnnotation never returns a java file because the latter cannot have file
+    // annotations, this is used internally to restore files across rounds.
+    override fun defer(): Restorable {
+        return Restorable {
+            analyze { getCached(psi) }
+        }
     }
 }

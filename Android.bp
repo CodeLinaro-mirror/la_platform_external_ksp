@@ -28,9 +28,37 @@ license {
     ],
 }
 
-java_library_host {
+java_import_host {
     name: "kotlin_symbol_processing_api",
-    visibility: ["//external/dagger2"],
-    srcs: ["api/src/**/*.kt"],
-    kotlincflags: ["-Xjvm-default=all-compatibility"],
+    visibility: [
+        "//external/dagger2",
+        "//build/soong/cmd/kotlinc_incremental",
+    ],
+    jars: [
+        "com/google/devtools/ksp/symbol-processing-api/2.2.20-2.0.2/symbol-processing-api-2.2.20-2.0.2.jar",
+    ],
+}
+
+java_import_host {
+    name: "ksp-common-deps",
+    visibility: ["//build/soong/cmd/kotlinc_incremental"],
+    jars: [
+        "com/google/devtools/ksp/symbol-processing-common-deps/2.2.20-2.0.2/symbol-processing-common-deps-2.2.20-2.0.2.jar",
+    ],
+}
+
+java_import_host {
+    name: "ksp-cmdline",
+    visibility: ["//build/soong/cmd/kotlinc_incremental"],
+    jars: [
+        "com/google/devtools/ksp/symbol-processing-cmdline/2.2.20-2.0.2/symbol-processing-cmdline-2.2.20-2.0.2.jar",
+    ],
+}
+
+java_import_host {
+    name: "ksp-aa-embeddable",
+    visibility: ["//build/soong/cmd/kotlinc_incremental"],
+    jars: [
+        "com/google/devtools/ksp/symbol-processing-aa-embeddable/2.2.20-2.0.2/symbol-processing-aa-embeddable-2.2.20-2.0.2.jar",
+    ],
 }

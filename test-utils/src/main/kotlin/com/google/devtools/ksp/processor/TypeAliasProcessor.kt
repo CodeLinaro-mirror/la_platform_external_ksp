@@ -17,6 +17,8 @@
 
 package com.google.devtools.ksp.processor
 
+import com.google.devtools.ksp.getConstructors
+import com.google.devtools.ksp.getDeclaredProperties
 import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.symbol.*
 
@@ -37,6 +39,7 @@ open class TypeAliasProcessor : AbstractTestProcessor() {
                     byFinalSignature.getOrPut(signatures.last()) {
                         mutableListOf()
                     }.add(propType)
+                    append(" = (expanded) ${resolver.expandType(propType).toSignature()}")
                 }
             }
         }.forEach(results::add)
@@ -56,6 +59,30 @@ open class TypeAliasProcessor : AbstractTestProcessor() {
                 }
             }
         }
+
+        val subjectName = resolver.getKSNameFromString("Subject")
+        val subject = resolver.getClassDeclarationByName(subjectName)!!
+        val constructor = subject.getConstructors().single()
+        val type1 = constructor.parameters.single().type.resolve()
+        val type2 = constructor.asMemberOf(subject.asType(emptyList())).parameterTypes.single()!!
+        val type1Signatures = type1.typeAliasSignatures().joinToString(" = ")
+        val type2Signatures = type2.typeAliasSignatures().joinToString(" = ")
+        val type1Expanded = resolver.expandType(type1).toSignature()
+        val type2Expanded = resolver.expandType(type2).toSignature()
+
+        results.add("param w.o. asMemberOf: $type1Signatures = (expanded) $type1Expanded")
+        results.add("param with asMemberOf: $type2Signatures = (expanded) $type2Expanded")
+
+        val property = subject.getDeclaredProperties().single()
+        val propertyType = property.type.resolve()
+        val propertyTypeSignatures = propertyType.typeAliasSignatures().joinToString(" = ")
+        val propertyTypeExpanded = resolver.expandType(propertyType).toSignature()
+        results.add(
+            "${property.simpleName.asString()}: " +
+                "${propertyType.declaration.qualifiedName?.asString()}: " +
+                "$propertyTypeSignatures = (expanded) $propertyTypeExpanded"
+        )
+
         return emptyList()
     }
 
@@ -70,14 +97,63 @@ open class TypeAliasProcessor : AbstractTestProcessor() {
     }
 
     private fun KSType.toSignature(): String = buildString {
+        annotations.toList().let {
+            if (it.isNotEmpty()) {
+                append(annotations.joinToString(separator = " ", postfix = " ") { "@${it.shortName.asString()}" })
+            }
+        }
         append(declaration.simpleName.asString())
         if (arguments.isNotEmpty()) {
             append("<")
-            arguments.map {
-                it.type?.resolve()?.toSignature() ?: "<error>"
+            arguments.mapIndexed { i, arg ->
+                val s = arg.type?.resolve()?.toSignature() ?: "<error>"
+                if (i < arguments.size - 1)
+                    s + ", "
+                else
+                    s
             }.forEach(this::append)
             append(">")
         }
+    }
+
+    private fun Resolver.expandType(type: KSType, substitutions: MutableMap<KSTypeParameter, KSType>): KSType {
+        val decl = type.declaration
+        return when (decl) {
+            is KSClassDeclaration -> {
+                val arguments = type.arguments.map {
+                    val argType = it.type?.resolve() ?: return@map it
+                    getTypeArgument(createKSTypeReferenceFromKSType(expandType(argType, substitutions)), it.variance)
+                }
+                decl.asType(arguments)
+            }
+
+            is KSTypeParameter -> {
+                val substituted = substitutions.get(decl) ?: return type
+                val fullySubstituted = expandType(substituted, substitutions)
+                // update/cache with refined substitution
+                if (substituted != fullySubstituted)
+                    substitutions[decl] = fullySubstituted
+                fullySubstituted
+            }
+
+            is KSTypeAlias -> {
+                val aliasedType = decl.type.resolve()
+
+                decl.typeParameters.zip(type.arguments).forEach { (param, arg) ->
+                    arg.type?.resolve()?.let {
+                        substitutions[param] = it
+                    }
+                }
+
+                expandType(aliasedType, substitutions)
+            }
+
+            else -> type
+        }
+    }
+
+    private fun Resolver.expandType(type: KSType): KSType {
+        return expandType(type, mutableMapOf())
     }
 
     override fun toResult(): List<String> {
