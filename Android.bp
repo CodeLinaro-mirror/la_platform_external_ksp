@@ -32,6 +32,7 @@ java_import_host {
     name: "kotlin_symbol_processing_api",
     visibility: [
         "//external/dagger2",
+        "//frameworks/libs/systemui/MutableDagger",
         "//build/soong/cmd/kotlinc_incremental",
     ],
     jars: [
